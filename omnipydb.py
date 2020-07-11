@@ -3,19 +3,16 @@ import json
 import sqlite3
 import datetime as dt
 import time
-import pandas as pd
 import glob
 
 
-def get_infusion_series(data_path: str, start_ts: float,
-                        end_ts: float = None, freq: str = 'T') -> pd.Series:
+def get_pod_sessions(data_path: str, start_ts: float,
+                        end_ts: float = None) -> list:
+
+    pod_sessions = []
 
     if end_ts is None:
         end_ts = time.time() + 80*60*60
-
-    pdt_start = pd.to_datetime(start_ts, unit='s', origin='unix', utc=True)
-    pdt_end = pd.to_datetime(end_ts, unit='s', origin='unix', utc=True)
-    infusions = pd.Series(None, index=pd.date_range(pdt_start, pdt_end, freq=freq)).fillna(0.0)
 
     for db_path in glob.glob(data_path + "\\*.db"):
 
@@ -35,10 +32,9 @@ def get_infusion_series(data_path: str, start_ts: float,
 
         if ts_pod_start is not None:
             if ts_pod_end > start_ts and ts_pod_start < end_ts:
-                entries = get_pod_session(db_path, removed).get_entries().resample(freq).sum()
-                infusions = infusions + entries
+                pod_sessions.append(get_pod_session(db_path, removed))
 
-    return infusions
+    return pod_sessions
 
 
 def get_pod_session(db_path: str, auto_remove: bool = False) -> PodSession:
