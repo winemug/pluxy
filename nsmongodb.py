@@ -40,7 +40,7 @@ def get_bg_series(mongo_uri: str,
 
     index = pd.to_datetime(df['date'].convert_dtypes(convert_integer=True), unit='ms', utc=True)
     sgv = pd.Series(df['sgv'].array, index)
-    if include_manual_entries:
+    if include_manual_entries and 'mbg' in df:
         mbg = pd.Series(df['mbg'].array, index)
         sgv = sgv.fillna(0) + mbg.fillna(0)
     else:
