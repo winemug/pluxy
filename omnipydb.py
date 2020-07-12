@@ -83,8 +83,12 @@ def get_pod_session(db_path: str, auto_remove: bool = False) -> PodSession:
             log_event(f"TEMPBASAL CANCEL", ts, minute, delivered, not_delivered, reservoir_remaining)
             ps.temp_basal_end(ts, minute, delivered, not_delivered, reservoir_remaining)
         elif command == "BOLUS" and success:
-            log_event(f"BOLUS {not_delivered}", ts, minute, delivered, not_delivered, reservoir_remaining)
-            ps.bolus_start(ts, minute, delivered, not_delivered, reservoir_remaining)
+            if "interval" in parameters:
+                p_i = parameters["interval"]
+            else:
+                p_i = 2
+            log_event(f"BOLUS {not_delivered} interval {p_i}", ts, minute, delivered, not_delivered, reservoir_remaining)
+            ps.bolus_start(ts, minute, delivered, not_delivered, reservoir_remaining, p_i)
         elif command == "BOLUS_CANCEL" and success:
             log_event(f"BOLUS CANCEL", ts, minute, delivered, not_delivered, reservoir_remaining)
             ps.bolus_end(ts, minute, delivered, not_delivered, reservoir_remaining)

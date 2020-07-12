@@ -59,7 +59,8 @@ def append_rate_ticks(ts_start: float, ts_end: float, tick_seconds: list, append
         idx += 1
 
 
-def append_bolus_ticks(bolus_start: float, bolus_ticks: int, append_to: list):
+def append_bolus_ticks(bolus_start: float, bolus_ticks: int, pulse_interval: int,
+                       append_to: list):
     dx = bolus_start
     idx = 0
     for dt_tick in append_to:
@@ -68,24 +69,26 @@ def append_bolus_ticks(bolus_start: float, bolus_ticks: int, append_to: list):
         idx += 1
 
     while bolus_ticks > 0:
-        idx, dx = find_bolus_slot(idx, dx, append_to)
+        idx, dx = find_bolus_slot(idx, dx, pulse_interval, append_to)
         append_to.insert(idx, dx)
         idx += 1
-        dx += 2
+        dx += pulse_interval
         bolus_ticks -= 1
 
 
-def find_bolus_slot(idx: int, bolus_tick_ts, tick_list: list) -> (int, float):
+def find_bolus_slot(idx: int, bolus_tick_ts: float,
+                    pulse_interval: int,
+                    tick_list: list) -> (int, float):
     if idx > 0 and len(tick_list) > 0:
         prev_tick = tick_list[idx - 1]
-        if bolus_tick_ts - prev_tick < 2.0:
-            bolus_tick_ts = prev_tick + 2.0
+        if bolus_tick_ts - prev_tick < pulse_interval:
+            bolus_tick_ts = prev_tick + pulse_interval
 
     if idx < len(tick_list):
         next_tick = tick_list[idx]
-        while next_tick - bolus_tick_ts < 2.0:
+        while next_tick - bolus_tick_ts < pulse_interval:
             idx += 1
-            bolus_tick_ts = next_tick + 2.0
+            bolus_tick_ts = next_tick + pulse_interval
             if idx == len(tick_list):
                 break
             next_tick = tick_list[idx]
@@ -154,8 +157,8 @@ class PodSession:
 
         append_rate_ticks(basal_start, basal_end, basal_ticks, ts_ticks)
 
-        for bolus_start, bolus_amount in self.boluses:
-            append_bolus_ticks(bolus_start, bolus_amount, ts_ticks)
+        for bolus_start, bolus_amount, p_i in self.boluses:
+            append_bolus_ticks(bolus_start, bolus_amount, p_i, ts_ticks)
 
         #        t = 0.0
         for i in range(0, len(ts_ticks)):
@@ -225,19 +228,20 @@ class PodSession:
 
     def bolus_start(self,
                     ts: float, minute: int,
-                    total_delivered: float, total_undelivered: float, reservoir_remaining: float):
+                    total_delivered: float, total_undelivered: float, reservoir_remaining: float,
+                    pulse_interval: int):
         self._add_entry(ts, minute, total_delivered, total_undelivered, reservoir_remaining)
         self.bolus_start_min = minute
         self.bolus_end_min = minute + int(self._pi(total_undelivered) / 30) + 1
         self.bolus_total = self._pi(total_undelivered)
-        self.boluses.append((ts, self.bolus_total))
+        self.boluses.append((ts, self.bolus_total, pulse_interval))
 
     def bolus_end(self,
                   ts: float, minute: int,
                   total_delivered: float, total_undelivered: float, reservoir_remaining: float):
         if self.bolus_start_min is not None:
-            last_bolus_start, last_bolus = self.boluses[-1]
-            self.boluses[-1] = (last_bolus_start, last_bolus - self._pi(total_undelivered))
+            last_bolus_start, last_bolus, p_i = self.boluses[-1]
+            self.boluses[-1] = (last_bolus_start, last_bolus - self._pi(total_undelivered), p_i)
         self._add_entry(ts, minute, total_delivered, total_undelivered, reservoir_remaining)
         self.bolus_start_min = None
         self.bolus_end_min = None
