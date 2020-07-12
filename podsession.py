@@ -130,6 +130,38 @@ class PodSession:
         self.boluses = []
         self.last_entry = None
 
+    def clone(self):
+        ps = PodSession()
+        ps.deliveries = self.deliveries
+        ps.fixed_stamps = self.fixed_stamps
+        ps.fixed_deliveries = self.fixed_deliveries
+        ps.ts_baseline = self.ts_baseline
+        ps.ts_baseline_min = self.ts_baseline_min
+        ps.ts_baseline_max = self.ts_baseline_max
+        ps.precision = self.precision
+        ps.reservoir = self.reservoir
+        ps.start_delivery_offset = self.start_delivery_offset
+
+        ps.activation_ts = self.activation_ts
+        ps.start_ts = self.start_ts
+        ps.basal_rate = self.basal_rate
+        ps.end_ts = self.end_ts
+
+        ps.temp_basal_start_min = self.temp_basal_start_min
+        ps.temp_basal_end_min = self.temp_basal_end_min
+        ps.temp_basal_total = self.temp_basal_total
+
+        ps.bolus_start_min = self.bolus_start_min
+        ps.bolus_end_min = self.bolus_end_min
+        ps.bolus_total = self.bolus_total
+
+        ps.ended = self.ended
+
+        ps.temp_basals = self.temp_basals
+        ps.boluses = self.boluses
+        ps.last_entry = self.last_entry
+        return ps
+
     def get_entries(self) -> pd.Series:
         ts_ticks = []
         deliveries = []
