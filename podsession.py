@@ -192,9 +192,7 @@ class PodSession:
         for bolus_start, bolus_amount, p_i in self.boluses:
             append_bolus_ticks(bolus_start, bolus_amount, p_i, ts_ticks)
 
-        #        t = 0.0
         for i in range(0, len(ts_ticks)):
-            #            t += 0.05
             deliveries.append(0.05)
 
         return pd.Series(deliveries, index=pd.to_datetime(ts_ticks, unit='s', origin='unix', utc=True))

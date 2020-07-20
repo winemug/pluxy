@@ -1,75 +1,79 @@
+from pymongo import MongoClient
+from pymongo.collection import Collection
+
 from podsession import PodSession
 import json
-import sqlite3
+import pymongo
 import datetime as dt
 import time
 import glob
+from bson.son import SON
 
-
-def get_pod_sessions(data_path: str, start_ts: float,
+def get_pod_sessions(mongo_uri: str, start_ts: float,
                         end_ts: float = None) -> list:
 
     pod_sessions = []
 
-    if end_ts is None:
-        end_ts = time.time() + 80*60*60
+    with MongoClient(mongo_uri) as mongo_client:
+        db = mongo_client.get_database("nightscout")
+        coll = db.get_collection("omnipy")
 
-    for db_path in glob.glob(data_path + "\\*.db"):
+        if end_ts is None:
+            end_ts = time.time() + 80*60*60
 
-        ts_pod_start = None
-        ts_pod_end = None
-        removed = None
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.execute("SELECT MIN(timestamp), MAX(timestamp)"
-                                  "FROM pod_history WHERE pod_state > 0 ORDER BY timestamp")
-            row = cursor.fetchone()
-            if row is not None:
-                ts_pod_start = row[0]
-                ts_pod_end = row[1]
-                cursor.close()
+        earliest = coll.find({'state_last_updated': {'$lte': start_ts}}).sort([('state_last_updated', -1)])[0]['last_command_db_ts']
+        latest = coll.find({'state_last_updated': {'$lte': end_ts}}).sort([('state_last_updated', -1)])[0]['last_command_db_ts']
 
-                removed = not db_path.endswith("pod.db")
+        agg = coll.aggregate([
+            {'$sort':
+                SON([('last_command_db_ts', -1)])
+            },
+            {'$match':
+                 {'last_command_db_ts': {'$gte': earliest, '$lte': latest}}
+            },
+            {'$group':
+                {'_id': '$pod_id'}
+            }
+            ])
 
-        if ts_pod_start is not None:
-            if ts_pod_end > start_ts and ts_pod_start < end_ts:
-                pod_sessions.append(get_pod_session(db_path, removed))
+        remove = False
+        for ag in agg:
+            pod_sessions.append(get_pod_session(ag["_id"], coll, remove))
+            remove = True
 
-    return pod_sessions
+        return sorted(pod_sessions, key=lambda ps: ps.activation_ts)
 
 
-def get_pod_session(db_path: str, auto_remove: bool = False) -> PodSession:
-    jss = []
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.execute("SELECT pod_json FROM pod_history WHERE pod_state >= 8 ORDER BY timestamp")
-        for row in cursor:
-            js = json.loads(row[0])
-            jss.append(js)
-        cursor.close()
+def get_pod_session(pod_id: str, coll: Collection, auto_remove: bool = True) -> PodSession:
+    pod_entries = coll.find({
+        'pod_id': pod_id,
+        'state_progress': { '$gte': 8 }
+                }).sort([('last_command_db_id', 1)])
 
     ps = PodSession()
 
-    for js in jss:
+    for pe in pod_entries:
         if ps.ended:
             break
 
-        delivered = float(js["insulin_delivered"])
-        not_delivered = float(js["insulin_canceled"])
-        reservoir_remaining = float(js["insulin_reservoir"])
-        ts = float(js["state_last_updated"])
-        minute = int(js["state_active_minutes"])
+        delivered = float(pe["insulin_delivered"])
+        not_delivered = float(pe["insulin_canceled"])
+        reservoir_remaining = float(pe["insulin_reservoir"])
+        ts = float(pe["state_last_updated"])
+        minute = int(pe["state_active_minutes"])
 
-        parameters = js["last_command"]
+        parameters = pe["last_command"]
         command = parameters["command"]
         success = parameters["success"]
 
-        if js["fault_event"]:
-            pod_minute_failure = int(js["fault_event_rel_time"])
+        if pe["fault_event"]:
+            pod_minute_failure = int(pe["fault_event_rel_time"])
             log_event(f"FAULTED at minute {pod_minute_failure}", ts, minute, delivered, not_delivered,
                       reservoir_remaining)
             ps.fail(ts, minute, delivered, not_delivered, reservoir_remaining, pod_minute_failure)
         elif command == "START" and success:
             basal_rate = parameters["hourly_rates"][0]
-            activation_date = js["var_activation_date"]
+            activation_date = pe["var_activation_date"]
             log_event(f"START {basal_rate}U/h", ts, minute, delivered, not_delivered, reservoir_remaining)
             ps.start(ts, minute, delivered, not_delivered, reservoir_remaining, basal_rate, activation_date)
         elif command == "TEMPBASAL" and success:
