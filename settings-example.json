@@ -1,3 +1,8 @@
 {
-  "mongo_uri": ""
+  "mongo_uri": "mongodb://user:pass@host:port/nightscout?authSource=nightscout&ssl=false",
+  "mongo_db_name": "nightscout",
+  "mongo_bg_entries": "entries",
+  "mongo_treatments": "treatments",
+  "mongo_omnipy_entries": "omnipy",
+  "mongo_omnipy_pods": "pods"
 }

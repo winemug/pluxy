@@ -129,38 +129,48 @@ class PodSession:
         self.temp_basals = []
         self.boluses = []
         self.last_entry = None
+        self.pod_id = None
 
-    def clone(self):
-        ps = PodSession()
-        ps.deliveries = self.deliveries
-        ps.fixed_stamps = self.fixed_stamps
-        ps.fixed_deliveries = self.fixed_deliveries
-        ps.ts_baseline = self.ts_baseline
-        ps.ts_baseline_min = self.ts_baseline_min
-        ps.ts_baseline_max = self.ts_baseline_max
-        ps.precision = self.precision
-        ps.reservoir = self.reservoir
-        ps.start_delivery_offset = self.start_delivery_offset
+    def get_boluses(self) -> pd.Series:
+        b = []
+        ts = []
+        for bolus_start, bolus_amount, p_i in self.boluses:
+            b.append(bolus_amount * self.precision)
+            ts.append(bolus_start)
 
-        ps.activation_ts = self.activation_ts
-        ps.start_ts = self.start_ts
-        ps.basal_rate = self.basal_rate
-        ps.end_ts = self.end_ts
+        return pd.Series(b, index=pd.to_datetime(ts, unit='s', origin='unix', utc=True))
 
-        ps.temp_basal_start_min = self.temp_basal_start_min
-        ps.temp_basal_end_min = self.temp_basal_end_min
-        ps.temp_basal_total = self.temp_basal_total
+    def get_rates(self) -> pd.Series:
+        rates = []
+        ts = []
+        basal_start = self.start_ts
+        for rate_start, rate_end, rate in self.temp_basals:
+            basal_end = rate_start
+            if basal_end > basal_start:
+                rates.append(self.basal_rate)
+                ts.append(basal_start)
 
-        ps.bolus_start_min = self.bolus_start_min
-        ps.bolus_end_min = self.bolus_end_min
-        ps.bolus_total = self.bolus_total
+            if self.ended and rate_end > self.end_ts:
+                rates.append(0)
+                ts.append(self.end_ts)
 
-        ps.ended = self.ended
+            if rate_end > rate_start:
+                rates.append(rate)
+                ts.append(rate_start)
+            basal_start = rate_end
 
-        ps.temp_basals = self.temp_basals
-        ps.boluses = self.boluses
-        ps.last_entry = self.last_entry
-        return ps
+        if self.ended:
+            basal_end = self.end_ts
+        else:
+            basal_end = self.activation_ts + 80 * 60 * 60
+
+        rates.append(self.basal_rate)
+        ts.append(basal_start)
+
+        rates.append(0)
+        ts.append(basal_end)
+
+        return pd.Series(rates, index=pd.to_datetime(ts, unit='s', origin='unix', utc=True)) * self.precision
 
     def get_entries(self) -> pd.Series:
         ts_ticks = []
@@ -196,6 +206,9 @@ class PodSession:
             deliveries.append(0.05)
 
         return pd.Series(deliveries, index=pd.to_datetime(ts_ticks, unit='s', origin='unix', utc=True))
+
+    def id(self, pod_id: str):
+        self.pod_id = pod_id
 
     def start(self,
               ts: float, minute: int,
