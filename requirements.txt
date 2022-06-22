@@ -1,6 +1,6 @@
 docopt==0.6.2
 kaleido==0.0.2
-numpy==1.19.1
+numpy==1.22.0
 pandas==1.1.0
 passlib==1.7.2
 plotly==4.9.0
